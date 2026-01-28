@@ -164,10 +164,16 @@ void showServerSettingsWithValue(
     OverlayDialogManager dialogManager,
     void Function(VoidCallback)? upSetState) async {
   var isInProgress = false;
-  final idCtrl = TextEditingController(text: serverConfig.idServer);
-  final relayCtrl = TextEditingController(text: serverConfig.relayServer);
-  final apiCtrl = TextEditingController(text: serverConfig.apiServer);
-  final keyCtrl = TextEditingController(text: serverConfig.key);
+  // Set your custom variables here (read-only)
+  const String customIdServer = "webdesk.supportwebcom.ir";
+  const String customRelayServer = "webdesk.supportwebcom.ir";
+  const String customApiServer = "your-api-server-value";
+  const String customKey = "bBkBZN8ZsQxUOnlUdgCUSwsJ6fbdzH5UTP3sLmPPV6s=";
+  
+  final idCtrl = TextEditingController(text: customIdServer.isNotEmpty ? customIdServer : serverConfig.idServer);
+  final relayCtrl = TextEditingController(text: customRelayServer.isNotEmpty ? customRelayServer : serverConfig.relayServer);
+  final apiCtrl = TextEditingController(text: customApiServer.isNotEmpty ? customApiServer : serverConfig.apiServer);
+  final keyCtrl = TextEditingController(text: customKey.isNotEmpty ? customKey : serverConfig.key);
 
   RxString idServerMsg = ''.obs;
   RxString relayServerMsg = ''.obs;
@@ -201,7 +207,7 @@ void showServerSettingsWithValue(
 
     Widget buildField(
         String label, TextEditingController controller, String errorMsg,
-        {String? Function(String?)? validator, bool autofocus = false}) {
+        {String? Function(String?)? validator, bool autofocus = false, bool readOnly = false}) {
       if (isDesktop || isWeb) {
         return Row(
           children: [
@@ -213,6 +219,7 @@ void showServerSettingsWithValue(
             Expanded(
               child: TextFormField(
                 controller: controller,
+                readOnly: readOnly,
                 decoration: InputDecoration(
                   errorText: errorMsg.isEmpty ? null : errorMsg,
                   contentPadding:
@@ -228,6 +235,7 @@ void showServerSettingsWithValue(
 
       return TextFormField(
         controller: controller,
+        readOnly: readOnly,
         decoration: InputDecoration(
           labelText: label,
           errorText: errorMsg.isEmpty ? null : errorMsg,
@@ -250,17 +258,18 @@ void showServerSettingsWithValue(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
-                      autofocus: true),
+                      autofocus: true, readOnly: true),
                   SizedBox(height: 8),
                   if (!isIOS && !isWeb) ...[
                     buildField(translate('Relay Server'), relayCtrl,
-                        relayServerMsg.value),
+                        relayServerMsg.value, readOnly: true),
                     SizedBox(height: 8),
                   ],
                   buildField(
                     translate('API Server'),
                     apiCtrl,
                     apiServerMsg.value,
+                    readOnly: true,
                     validator: (v) {
                       if (v != null && v.isNotEmpty) {
                         if (!(v.startsWith('http://') ||
@@ -272,7 +281,7 @@ void showServerSettingsWithValue(
                     },
                   ),
                   SizedBox(height: 8),
-                  buildField('Key', keyCtrl, ''),
+                  buildField('Key', keyCtrl, '', readOnly: true),
                   if (isInProgress)
                     Padding(
                       padding: EdgeInsets.only(top: 8),
