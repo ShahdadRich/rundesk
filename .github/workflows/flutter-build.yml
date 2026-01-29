@@ -12,22 +12,28 @@ env:
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.5"
-  SIGN_BASE_URL: "-2" 
+  # تنظیم مسیر ثابت ویندوزی برای vcpkg
+  VCPKG_ROOT: "C:/vcpkg"
+  SIGN_BASE_URL: "-2"
 
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
+  build-RustDeskTempTopMostWindow:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: true
+      target: windows-2022
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+
   build-for-windows:
-    name: Windows-Build-Final
-    needs: [generate-bridge]
+    name: Windows-Build-Final-V2
+    needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: windows-2022
     steps:
-      - name: Free Disk Space
-        run: |
-          Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "C:\Android" -ErrorAction SilentlyContinue
-
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
@@ -60,20 +66,24 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgDirectory: C:\vcpkg
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-      - name: Install vcpkg dependencies (CRITICAL)
+      - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          # این مرحله تمام کتابخانه‌های تصویری مثل FFmpeg را نصب می‌کند
-          C:\vcpkg\vcpkg.exe install --triplet x64-windows-static --x-install-root="C:\vcpkg\installed"
+          # اجرای نصب بر اساس فایل vcpkg.json موجود در پروژه
+          & "${{ env.VCPKG_ROOT }}/vcpkg.exe" install --triplet x64-windows-static --x-install-root="${{ env.VCPKG_ROOT }}/installed"
 
       - name: Build rustdesk
         shell: pwsh
+        env:
+          # تزریق مستقیم مسیرها به متغیرهای سیستمی ویندوز در زمان اجرا
+          INCLUDE: "C:/vcpkg/installed/x64-windows-static/include"
+          LIB: "C:/vcpkg/installed/x64-windows-static/lib"
+          VCPKG_ROOT: "C:/vcpkg"
         run: |
-          # تنظیم متغیر محیطی برای اینکه کامپایلر بداند FFmpeg کجاست
-          $env:VCPKG_ROOT = "C:\vcpkg"
+          # استفاده از پایتون برای اجرای اسکریپت اصلی بیلد
           python3 .\build.py --flutter --hwcodec --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
@@ -86,5 +96,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Final
+          name: RustDesk-Windows-Package
           path: rustdesk-output/
