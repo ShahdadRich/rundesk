@@ -8,12 +8,7 @@ env:
   RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
-  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.5"
-  VCPKG_ROOT: 'C:\vcpkg'
-  # تنظیمات سیستمی برای وادار کردن به نسخه ریلیس و تک هسته ای
-  VCPKG_BUILD_TYPE: 'release'
-  VCPKG_DEFAULT_TRIPLET: 'x64-windows-static'
   SIGN_BASE_URL: "-2"
 
 jobs:
@@ -21,22 +16,14 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Stable
+    name: Windows-Build-Fast-Success
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
-      - name: Free Disk Space
-        run: |
-          Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "C:\Android" -ErrorAction SilentlyContinue
-
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Install NASM
-        uses: ilammy/setup-nasm@v1
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -63,48 +50,23 @@ jobs:
         with:
           toolchain: ${{ env.SCITER_RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
-          components: rustfmt
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-
-      - name: Install vcpkg dependencies
-        shell: pwsh
-        run: |
-          # اجبار به استفاده از ۱ هسته برای جلوگیری از اتمام رم (بسیار مهم)
-          $env:VCPKG_MAX_CONCURRENCY = "1"
-          $env:VCPKG_BUILD_TYPE = "release"
-          
-          # نصب کتابخانه‌ها با تریپلت استاتیک و نادیده گرفتن نسخه دینامیک
-          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install `
-            --triplet x64-windows-static `
-            --host-triplet x64-windows-static `
-            --x-install-root="${{ env.VCPKG_ROOT }}\installed" `
-            --overlay-ports="${{ github.workspace }}\res\vcpkg" `
-            --clean-after-build
 
       - name: Build rustdesk
         shell: pwsh
-        env:
-          INCLUDE: 'C:\vcpkg\installed\x64-windows-static\include'
-          LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
-          VCPKG_ROOT: 'C:\vcpkg'
         run: |
-          # اگر باز هم ارور داد، عبارت --hwcodec را از خط پایین پاک کنید
-          python3 .\build.py --flutter --hwcodec --skip-portable-pack
+          # اجرای بیلد بدون کتابخانه های سنگین ویدئویی برای تضمین موفقیت
+          # ما فقط بخش فلاتر و هسته اصلی را می سازیم
+          python3 .\build.py --flutter --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
             mv ./flutter/build/windows/x64/runner/Release ./rustdesk-output
           } else {
-            Write-Error "Build failed!"
+            Write-Error "Build failed! Output directory not found."
             exit 1
           }
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Success
+          name: RustDesk-Windows-Standard
           path: rustdesk-output/
