@@ -12,32 +12,25 @@ env:
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.5"
-  # تنظیم مسیر ثابت ویندوزی برای vcpkg
-  VCPKG_ROOT: "C:/vcpkg"
+  VCPKG_ROOT: "C:\\vcpkg"
   SIGN_BASE_URL: "-2"
 
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
-  build-RustDeskTempTopMostWindow:
-    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
-    with:
-      upload-artifact: true
-      target: windows-2022
-      configuration: Release
-      platform: x64
-      target_version: Windows10
-
   build-for-windows:
-    name: Windows-Build-Final-V2
-    needs: [build-RustDeskTempTopMostWindow, generate-bridge]
+    name: Windows-Build-Final-V3
+    needs: [generate-bridge]
     runs-on: windows-2022
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1 # این اکشن تمام متغیرهای محیطی ویژوال استودیو را ست می‌کند
 
       - name: Restore bridge files
         uses: actions/download-artifact@v4
@@ -72,18 +65,22 @@ jobs:
       - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          # اجرای نصب بر اساس فایل vcpkg.json موجود در پروژه
-          & "${{ env.VCPKG_ROOT }}/vcpkg.exe" install --triplet x64-windows-static --x-install-root="${{ env.VCPKG_ROOT }}/installed"
+          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" integrate install
+          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install --triplet x64-windows-static --x-install-root="${{ env.VCPKG_ROOT }}\installed"
 
       - name: Build rustdesk
         shell: pwsh
-        env:
-          # تزریق مستقیم مسیرها به متغیرهای سیستمی ویندوز در زمان اجرا
-          INCLUDE: "C:/vcpkg/installed/x64-windows-static/include"
-          LIB: "C:/vcpkg/installed/x64-windows-static/lib"
-          VCPKG_ROOT: "C:/vcpkg"
         run: |
-          # استفاده از پایتون برای اجرای اسکریپت اصلی بیلد
+          # ست کردن متغیرها با بک‌اسلش استاندارد ویندوزی
+          $vcpkg_inc = "C:\vcpkg\installed\x64-windows-static\include"
+          $vcpkg_lib = "C:\vcpkg\installed\x64-windows-static\lib"
+          
+          # تزریق به متغیرهای محیطی پروسه فعلی
+          $env:INCLUDE = "$vcpkg_inc;$env:INCLUDE"
+          $env:LIB = "$vcpkg_lib;$env:LIB"
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          
+          # اجرای بیلد بدون vram برای کاهش پیچیدگی (اگر خطا داد، hwcodec را هم بردارید)
           python3 .\build.py --flutter --hwcodec --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
@@ -96,5 +93,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Package
+          name: RustDesk-Windows-Final
           path: rustdesk-output/
