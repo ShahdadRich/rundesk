@@ -10,7 +10,7 @@ env:
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_ROOT: 'C:\vcpkg'
-  # تنظیم مسیرها برای شناسایی توسط کامپایلر
+  # مسیرهای هدر و کتابخانه برای کامپایلر
   INCLUDE: 'C:\vcpkg\installed\x64-windows-static\include'
   LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
 
@@ -19,7 +19,7 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Standard-Success
+    name: Windows-Build-Classic-Mode
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
@@ -28,7 +28,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install NASM (Required)
+      - name: Install NASM
         uses: ilammy/setup-nasm@v1
 
       - name: Setup MSVC
@@ -60,8 +60,15 @@ jobs:
       - name: Install Minimal Essential Dependencies
         shell: pwsh
         run: |
-          # ما فقط پکیج های سبک و حیاتی را نصب می کنیم تا رم پر نشود
-          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install opus:x64-windows-static libvpx:x64-windows-static libyuv:x64-windows-static --x-install-root="${{ env.VCPKG_ROOT }}\installed"
+          # استفاده از --classic برای نادیده گرفتن فایل vcpkg.json پروژه
+          # نصب فقط پکیج‌های سبک برای جلوگیری از کراش رم
+          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install `
+            --classic `
+            opus:x64-windows-static `
+            libvpx:x64-windows-static `
+            libyuv:x64-windows-static `
+            --triplet x64-windows-static `
+            --x-install-root="${{ env.VCPKG_ROOT }}\installed"
 
       - name: Build rustdesk
         shell: pwsh
@@ -70,18 +77,18 @@ jobs:
           LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
           VCPKG_ROOT: 'C:\vcpkg'
         run: |
-          # بیلد بدون hwcodec برای جلوگیری از خطای ffmpeg و aom
+          # بیلد بدون hwcodec برای سرعت و پایداری
           python3 .\build.py --flutter --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
             mv ./flutter/build/windows/x64/runner/Release ./rustdesk-output
           } else {
-            Write-Error "Build failed!"
+            Write-Error "Build failed! Output directory not found."
             exit 1
           }
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Standard
+          name: RustDesk-Windows-Final
           path: rustdesk-output/
