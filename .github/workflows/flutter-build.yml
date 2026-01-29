@@ -2,15 +2,6 @@ name: Build the flutter version of the RustDesk
 
 on:
   workflow_dispatch:
-    inputs:
-      upload-artifact:
-        type: boolean
-        description: 'Upload Artifact?'
-        default: true
-      upload-tag:
-        type: string
-        description: 'Tag Name'
-        default: "manual-build"
   push:
     branches: ["master", "main"]
 
@@ -21,60 +12,48 @@ env:
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.5"
-  UPLOAD_ARTIFACT: "true"
-  # این مقدار را -2 گذاشتم تا مراحل امضای دیجیتال که کلیدش را ندارید اسکیپ شود
   SIGN_BASE_URL: "-2" 
 
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
-  build-RustDeskTempTopMostWindow:
-    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
-    with:
-      upload-artifact: true
-      target: windows-2022
-      configuration: Release
-      platform: x64
-      target_version: Windows10
-
-  build-for-windows-flutter:
-    name: Windows-Build-x64
-    needs: [build-RustDeskTempTopMostWindow, generate-bridge]
+  build-for-windows:
+    name: Windows-Build-Simplified
+    needs: [generate-bridge]
     runs-on: windows-2022
-    strategy:
-      fail-fast: false
     steps:
+      - name: Free Disk Space
+        run: |
+          Write-Host "Cleaning up unnecessary files to free space..."
+          Get-ChildItem -Path C:\ -Include *.vhd,*.iso -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+          # حذف ابزارهای سنگین که نیاز نداریم
+          Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "C:\Android" -ErrorAction SilentlyContinue
+
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Restore bridge files
-        uses: actions/download-artifact@master
+        uses: actions/download-artifact@v4
         with:
           name: bridge-artifact
           path: ./
 
-      - name: Install LLVM and Clang
+      - name: Install LLVM
         uses: KyleMayes/install-llvm-action@v1
         with:
           version: ${{ env.LLVM_VERSION }}
 
       - name: Install flutter
-        uses: subosito/flutter-action@v2.12.0
+        uses: subosito/flutter-action@v2
         with:
           channel: "stable"
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
-      - name: Replace engine
-        run: |
-          flutter precache --windows
-          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
-          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
-          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
-
-      - name: Install Rust toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.SCITER_RUST_VERSION }}
@@ -87,12 +66,21 @@ jobs:
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Build rustdesk
+        shell: pwsh
         run: |
-          python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
-          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+          # اجرای بیلد با تنظیمات پایه برای جلوگیری از کراش
+          python3 .\build.py --flutter --hwcodec --skip-portable-pack
+          
+          # بررسی اینکه آیا بیلد موفق بوده یا نه
+          if (Test-Path "./flutter/build/windows/x64/runner/Release") {
+            mv ./flutter/build/windows/x64/runner/Release ./rustdesk-output
+          } else {
+            Write-Error "Build failed! Output directory not found."
+            exit 1
+          }
 
-      - name: Upload Windows EXE
+      - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-x64-Custom
-          path: rustdesk/
+          name: RustDesk-Windows-Package
+          path: rustdesk-output/
