@@ -8,15 +8,18 @@ env:
   RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
-  VERSION: "1.4.5"
-  SIGN_BASE_URL: "-2"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_ROOT: 'C:\vcpkg'
+  # تنظیم مسیرها برای شناسایی توسط کامپایلر
+  INCLUDE: 'C:\vcpkg\installed\x64-windows-static\include'
+  LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
 
 jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Fast-Success
+    name: Windows-Build-Standard-Success
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
@@ -25,14 +28,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install NASM (Required)
+        uses: ilammy/setup-nasm@v1
+
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Restore bridge files
-        uses: actions/download-artifact@v4
-        with:
-          name: bridge-artifact
-          path: ./
 
       - name: Install LLVM
         uses: KyleMayes/install-llvm-action@v1
@@ -51,17 +51,32 @@ jobs:
           toolchain: ${{ env.SCITER_RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
 
-      - name: Build rustdesk
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install Minimal Essential Dependencies
         shell: pwsh
         run: |
-          # اجرای بیلد بدون کتابخانه های سنگین ویدئویی برای تضمین موفقیت
-          # ما فقط بخش فلاتر و هسته اصلی را می سازیم
+          # ما فقط پکیج های سبک و حیاتی را نصب می کنیم تا رم پر نشود
+          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install opus:x64-windows-static libvpx:x64-windows-static libyuv:x64-windows-static --x-install-root="${{ env.VCPKG_ROOT }}\installed"
+
+      - name: Build rustdesk
+        shell: pwsh
+        env:
+          INCLUDE: 'C:\vcpkg\installed\x64-windows-static\include'
+          LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
+          VCPKG_ROOT: 'C:\vcpkg'
+        run: |
+          # بیلد بدون hwcodec برای جلوگیری از خطای ffmpeg و aom
           python3 .\build.py --flutter --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
             mv ./flutter/build/windows/x64/runner/Release ./rustdesk-output
           } else {
-            Write-Error "Build failed! Output directory not found."
+            Write-Error "Build failed!"
             exit 1
           }
 
