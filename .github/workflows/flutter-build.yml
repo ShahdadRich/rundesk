@@ -10,7 +10,7 @@ env:
   FLUTTER_VERSION: "3.24.5"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.5"
-  VCPKG_ROOT: "C:\\vcpkg"
+  VCPKG_ROOT: 'C:\vcpkg'
   SIGN_BASE_URL: "-2"
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Final-Fixed
+    name: Windows-Build-Success-Final
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
@@ -66,25 +66,24 @@ jobs:
       - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          # محدود کردن پردازش به ۲ هسته برای جلوگیری از اتمام رم
+          # محدود کردن پردازش برای جلوگیری از کراش رم
           $env:VCPKG_MAX_CONCURRENCY = "2"
           
-          # نصب فقط نسخه Release و استفاده از پورت‌های اختصاصی پروژه
+          # نصب کتابخانه‌ها با استفاده از پورت‌های پروژه
           & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install `
             --triplet x64-windows-static `
             --x-install-root="${{ env.VCPKG_ROOT }}\installed" `
             --overlay-ports="${{ github.workspace }}\res\vcpkg" `
             --clean-after-build
-        # نکته: استفاده از overlay-ports باعث می‌شود vcpkg از تنظیمات دقیق RustDesk استفاده کند
 
       - name: Build rustdesk
         shell: pwsh
         env:
-          INCLUDE: "C:\vcpkg\installed\x64-windows-static\include"
-          LIB: "C:\vcpkg\installed\x64-windows-static\lib"
-          VCPKG_ROOT: "C:\vcpkg"
+          # استفاده از تک کوتیشن برای مسیرهای ویندوزی جهت جلوگیری از خطای YAML
+          INCLUDE: 'C:\vcpkg\installed\x64-windows-static\include'
+          LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
+          VCPKG_ROOT: 'C:\vcpkg'
         run: |
-          # اجرای بیلد نهایی
           python3 .\build.py --flutter --hwcodec --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
