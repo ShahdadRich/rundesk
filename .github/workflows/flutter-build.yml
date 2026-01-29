@@ -19,15 +19,12 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Simplified
+    name: Windows-Build-Final
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
       - name: Free Disk Space
         run: |
-          Write-Host "Cleaning up unnecessary files to free space..."
-          Get-ChildItem -Path C:\ -Include *.vhd,*.iso -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-          # حذف ابزارهای سنگین که نیاز نداریم
           Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "C:\Android" -ErrorAction SilentlyContinue
 
@@ -58,6 +55,7 @@ jobs:
         with:
           toolchain: ${{ env.SCITER_RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -65,13 +63,19 @@ jobs:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
+      - name: Install vcpkg dependencies (CRITICAL)
+        shell: pwsh
+        run: |
+          # این مرحله تمام کتابخانه‌های تصویری مثل FFmpeg را نصب می‌کند
+          C:\vcpkg\vcpkg.exe install --triplet x64-windows-static --x-install-root="C:\vcpkg\installed"
+
       - name: Build rustdesk
         shell: pwsh
         run: |
-          # اجرای بیلد با تنظیمات پایه برای جلوگیری از کراش
+          # تنظیم متغیر محیطی برای اینکه کامپایلر بداند FFmpeg کجاست
+          $env:VCPKG_ROOT = "C:\vcpkg"
           python3 .\build.py --flutter --hwcodec --skip-portable-pack
           
-          # بررسی اینکه آیا بیلد موفق بوده یا نه
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
             mv ./flutter/build/windows/x64/runner/Release ./rustdesk-output
           } else {
@@ -82,5 +86,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Package
+          name: RustDesk-Windows-Final
           path: rustdesk-output/
