@@ -11,6 +11,8 @@ env:
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VERSION: "1.4.5"
   VCPKG_ROOT: 'C:\vcpkg'
+  # دستور حیاتی: فقط نسخه Release ساخته شود تا رم کم نیاید
+  VCPKG_BUILD_TYPE: 'release' 
   SIGN_BASE_URL: "-2"
 
 jobs:
@@ -18,7 +20,7 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Success-Final
+    name: Windows-Build-Release-Only
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
@@ -27,7 +29,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install NASM (Required for AOM)
+      - name: Install NASM
         uses: ilammy/setup-nasm@v1
 
       - name: Setup MSVC
@@ -66,10 +68,11 @@ jobs:
       - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          # محدود کردن پردازش برای جلوگیری از کراش رم
+          # تنظیم محدودیت‌ها
           $env:VCPKG_MAX_CONCURRENCY = "2"
+          $env:VCPKG_BUILD_TYPE = "release"
           
-          # نصب کتابخانه‌ها با استفاده از پورت‌های پروژه
+          # نصب کتابخانه‌ها
           & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install `
             --triplet x64-windows-static `
             --x-install-root="${{ env.VCPKG_ROOT }}\installed" `
@@ -79,7 +82,6 @@ jobs:
       - name: Build rustdesk
         shell: pwsh
         env:
-          # استفاده از تک کوتیشن برای مسیرهای ویندوزی جهت جلوگیری از خطای YAML
           INCLUDE: 'C:\vcpkg\installed\x64-windows-static\include'
           LIB: 'C:\vcpkg\installed\x64-windows-static\lib'
           VCPKG_ROOT: 'C:\vcpkg'
@@ -89,12 +91,12 @@ jobs:
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
             mv ./flutter/build/windows/x64/runner/Release ./rustdesk-output
           } else {
-            Write-Error "Build failed! Output directory not found."
+            Write-Error "Build failed!"
             exit 1
           }
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Success
+          name: RustDesk-Windows-Package
           path: rustdesk-output/
