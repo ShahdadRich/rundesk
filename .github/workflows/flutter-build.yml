@@ -2,8 +2,6 @@ name: Build the flutter version of the RustDesk
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["master", "main"]
 
 env:
   SCITER_RUST_VERSION: "1.75"
@@ -20,7 +18,7 @@ jobs:
     uses: ./.github/workflows/bridge.yml
 
   build-for-windows:
-    name: Windows-Build-Final-V3
+    name: Windows-Build-Final-Fixed
     needs: [generate-bridge]
     runs-on: windows-2022
     steps:
@@ -29,8 +27,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1 # این اکشن تمام متغیرهای محیطی ویژوال استودیو را ست می‌کند
+      - name: Install NASM (Required for AOM)
+        uses: ilammy/setup-nasm@v1
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Restore bridge files
         uses: actions/download-artifact@v4
@@ -65,22 +66,25 @@ jobs:
       - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" integrate install
-          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install --triplet x64-windows-static --x-install-root="${{ env.VCPKG_ROOT }}\installed"
+          # محدود کردن پردازش به ۲ هسته برای جلوگیری از اتمام رم
+          $env:VCPKG_MAX_CONCURRENCY = "2"
+          
+          # نصب فقط نسخه Release و استفاده از پورت‌های اختصاصی پروژه
+          & "${{ env.VCPKG_ROOT }}\vcpkg.exe" install `
+            --triplet x64-windows-static `
+            --x-install-root="${{ env.VCPKG_ROOT }}\installed" `
+            --overlay-ports="${{ github.workspace }}\res\vcpkg" `
+            --clean-after-build
+        # نکته: استفاده از overlay-ports باعث می‌شود vcpkg از تنظیمات دقیق RustDesk استفاده کند
 
       - name: Build rustdesk
         shell: pwsh
+        env:
+          INCLUDE: "C:\vcpkg\installed\x64-windows-static\include"
+          LIB: "C:\vcpkg\installed\x64-windows-static\lib"
+          VCPKG_ROOT: "C:\vcpkg"
         run: |
-          # ست کردن متغیرها با بک‌اسلش استاندارد ویندوزی
-          $vcpkg_inc = "C:\vcpkg\installed\x64-windows-static\include"
-          $vcpkg_lib = "C:\vcpkg\installed\x64-windows-static\lib"
-          
-          # تزریق به متغیرهای محیطی پروسه فعلی
-          $env:INCLUDE = "$vcpkg_inc;$env:INCLUDE"
-          $env:LIB = "$vcpkg_lib;$env:LIB"
-          $env:VCPKG_ROOT = "C:\vcpkg"
-          
-          # اجرای بیلد بدون vram برای کاهش پیچیدگی (اگر خطا داد، hwcodec را هم بردارید)
+          # اجرای بیلد نهایی
           python3 .\build.py --flutter --hwcodec --skip-portable-pack
           
           if (Test-Path "./flutter/build/windows/x64/runner/Release") {
@@ -93,5 +97,5 @@ jobs:
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Windows-Final
+          name: RustDesk-Windows-Success
           path: rustdesk-output/
